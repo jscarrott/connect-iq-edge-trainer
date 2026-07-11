@@ -2,7 +2,7 @@ import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.WatchUi;
 
-// Launch screen: shows the configured protocol, START begins the
+// Launch screen: shows the configured plan, START begins the
 // workout, MENU (or long press) opens settings.
 class StartView extends WatchUi.View {
 
@@ -21,25 +21,38 @@ class StartView extends WatchUi.View {
         var h = dc.getHeight();
 
         dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 15 / 100, Graphics.FONT_MEDIUM, "Edge Trainer",
+        dc.drawText(cx, h * 10 / 100, Graphics.FONT_MEDIUM, "Edge Trainer",
             Graphics.TEXT_JUSTIFY_CENTER);
 
+        // Plan blocks, one per line (first 4, then "+N more")
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        var line1 = _config.sets + " sets x " + _config.reps + " lifts";
-        var line2 = _config.workSecs + "s on / " + _config.repRestSecs + "s off";
-        var line3 = (_config.setRestSecs / 60.0).format("%.1f") + " min between sets";
-        var line4 = _config.edgeName() + " @ " + _config.weightKg.format("%.1f") + " kg";
-        if (_config.alternateHands) {
-            line4 += "  L/R";
+        var n = _config.blocks.size();
+        var shown = (n > 4) ? 3 : n;
+        var y = 24;
+        for (var i = 0; i < shown; i++) {
+            dc.drawText(cx, h * y / 100, Graphics.FONT_SMALL,
+                _config.blockLabel(i), Graphics.TEXT_JUSTIFY_CENTER);
+            y += 9;
         }
-        dc.drawText(cx, h * 32 / 100, Graphics.FONT_SMALL, line1, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(cx, h * 44 / 100, Graphics.FONT_SMALL, line2, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(cx, h * 56 / 100, Graphics.FONT_SMALL, line3, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(cx, h * 68 / 100, Graphics.FONT_SMALL, line4, Graphics.TEXT_JUSTIFY_CENTER);
+        if (n > shown) {
+            dc.drawText(cx, h * y / 100, Graphics.FONT_SMALL,
+                "+" + (n - shown) + " more blocks", Graphics.TEXT_JUSTIFY_CENTER);
+            y += 9;
+        }
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 82 / 100, Graphics.FONT_XTINY, "START to go - MENU for setup",
+        var timing = _config.workSecs + "s on / " + _config.repRestSecs + "s off";
+        dc.drawText(cx, h * (y + 2) / 100, Graphics.FONT_XTINY, timing,
             Graphics.TEXT_JUSTIFY_CENTER);
+        var edge = _config.edgeName();
+        if (_config.alternateHands) {
+            edge += "  L/R";
+        }
+        dc.drawText(cx, h * (y + 11) / 100, Graphics.FONT_XTINY, edge,
+            Graphics.TEXT_JUSTIFY_CENTER);
+
+        dc.drawText(cx, h * 86 / 100, Graphics.FONT_XTINY,
+            "START to go - MENU for setup", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }
 

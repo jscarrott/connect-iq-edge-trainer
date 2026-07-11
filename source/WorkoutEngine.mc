@@ -8,6 +8,8 @@ import Toybox.Timer;
 import Toybox.WatchUi;
 
 // Interval state machine for an edge-lifting workout.
+// The configured blocks are flattened into a per-set plan
+// ([lifts, weight] per set), then run:
 // PREP -> [WORK -> REST]... -> SET_REST -> ... -> DONE
 class WorkoutEngine {
 
@@ -23,7 +25,8 @@ class WorkoutEngine {
 
     var config as WorkoutConfig;
     var state as State = STATE_PREP;
-    var currentSet as Number = 1;
+    var currentSet as Number = 1;   // 1-based, across all blocks
+    var totalSets as Number = 1;
     var currentRep as Number = 1;
     var remaining as Number = PREP_SECS;
     var paused as Boolean = false;
@@ -31,23 +34,43 @@ class WorkoutEngine {
     var completedLifts as Number = 0;
     var failedLifts as Number = 0;
     var lastLiftFailed as Boolean = false;
+    var volumeKg as Float = 0.0;    // sum of weight over finished lifts
 
+    private var _setPlan as Array = []; // per set: [lifts, weight kg]
     private var _timer as Timer.Timer;
     private var _session as ActivityRecording.Session?;
     private var _fEdge as FitContributor.Field?;
-    private var _fWeight as FitContributor.Field?;
+    private var _fMaxWeight as FitContributor.Field?;
     private var _fLifts as FitContributor.Field?;
     private var _fFailed as FitContributor.Field?;
     private var _fRpe as FitContributor.Field?;
+    private var _fVolume as FitContributor.Field?;
+    private var _fLapWeight as FitContributor.Field?;
 
     function initialize(cfg as WorkoutConfig) {
         config = cfg;
         _timer = new Timer.Timer();
+        _setPlan = [];
+        for (var i = 0; i < cfg.blocks.size(); i++) {
+            var b = cfg.blocks[i];
+            for (var s = 0; s < (b[BLOCK_SETS] as Number); s++) {
+                _setPlan.add([b[BLOCK_REPS], b[BLOCK_WEIGHT]]);
+            }
+        }
+        totalSets = _setPlan.size();
+    }
+
+    function repsThisSet() as Number {
+        return _setPlan[currentSet - 1][0] as Number;
+    }
+
+    function currentWeight() as Float {
+        return _setPlan[currentSet - 1][1] as Float;
     }
 
     function start() as Void {
-        var name = "Edge Lift " + config.edgeName() + " "
-            + config.weightKg.format("%.1f") + "kg";
+        var name = "Edge Lift " + config.edgeName() + " top "
+            + config.maxWeight().format("%.1f") + "kg";
         _session = ActivityRecording.createSession({
             :name => name,
             :sport => Activity.SPORT_TRAINING,
@@ -68,7 +91,7 @@ class WorkoutEngine {
         }
         _fEdge = s.createField("edge_type", 0, FitContributor.DATA_TYPE_STRING,
             {:count => 16, :mesgType => FitContributor.MESG_TYPE_SESSION});
-        _fWeight = s.createField("weight", 1, FitContributor.DATA_TYPE_FLOAT,
+        _fMaxWeight = s.createField("max_weight", 1, FitContributor.DATA_TYPE_FLOAT,
             {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "kg"});
         _fLifts = s.createField("lifts_completed", 2, FitContributor.DATA_TYPE_UINT16,
             {:mesgType => FitContributor.MESG_TYPE_SESSION});
@@ -76,11 +99,18 @@ class WorkoutEngine {
             {:mesgType => FitContributor.MESG_TYPE_SESSION});
         _fRpe = s.createField("rpe", 4, FitContributor.DATA_TYPE_FLOAT,
             {:mesgType => FitContributor.MESG_TYPE_SESSION});
+        _fVolume = s.createField("volume", 5, FitContributor.DATA_TYPE_FLOAT,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "kg"});
+        _fLapWeight = s.createField("weight", 6, FitContributor.DATA_TYPE_FLOAT,
+            {:mesgType => FitContributor.MESG_TYPE_LAP, :units => "kg"});
         if (_fEdge != null) {
             _fEdge.setData(config.edgeName());
         }
-        if (_fWeight != null) {
-            _fWeight.setData(config.weightKg);
+        if (_fMaxWeight != null) {
+            _fMaxWeight.setData(config.maxWeight());
+        }
+        if (_fLapWeight != null) {
+            _fLapWeight.setData(currentWeight());
         }
     }
 
@@ -106,17 +136,25 @@ class WorkoutEngine {
             _buzz(true);
         } else if (state == STATE_WORK) {
             completedLifts += 1;
-            if (currentRep < config.reps) {
+            volumeKg += currentWeight();
+            if (currentRep < repsThisSet()) {
                 currentRep += 1;
                 state = STATE_REST;
                 remaining = config.repRestSecs;
                 _buzz(false);
-            } else if (currentSet < config.sets) {
+            } else if (currentSet < totalSets) {
                 if (_session != null) {
+                    // lap weight applies to the lap being closed
+                    if (_fLapWeight != null) {
+                        _fLapWeight.setData(currentWeight());
+                    }
                     _session.addLap();
                 }
                 currentSet += 1;
                 currentRep = 1;
+                if (_fLapWeight != null) {
+                    _fLapWeight.setData(currentWeight());
+                }
                 state = STATE_SET_REST;
                 remaining = config.setRestSecs;
                 _buzz(false);
@@ -180,12 +218,18 @@ class WorkoutEngine {
         state = STATE_DONE;
         paused = false;
         if (_session != null) {
+            if (_fLapWeight != null) {
+                _fLapWeight.setData(currentWeight());
+            }
             _session.stop();
             if (_fLifts != null) {
                 _fLifts.setData(completedLifts);
             }
             if (_fFailed != null) {
                 _fFailed.setData(failedLifts);
+            }
+            if (_fVolume != null) {
+                _fVolume.setData(volumeKg);
             }
             _buzz(true);
             var picker = new NumberPickerView("Effort (RPE)", 7.0, 1.0, 10.0,

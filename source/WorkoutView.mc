@@ -69,14 +69,14 @@ class WorkoutView extends WatchUi.View {
         }
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        var progress = "Set " + _engine.currentSet + "/" + _engine.config.sets
-            + "  Rep " + _engine.currentRep + "/" + _engine.config.reps;
+        var progress = "Set " + _engine.currentSet + "/" + _engine.totalSets
+            + "  Rep " + _engine.currentRep + "/" + _engine.repsThisSet();
         dc.drawText(cx, h * 62 / 100, Graphics.FONT_SMALL, progress,
             Graphics.TEXT_JUSTIFY_CENTER);
 
         var hr = _engine.heartRate();
         var bottom = _engine.config.edgeName() + "  "
-            + _engine.config.weightKg.format("%.1f") + "kg";
+            + _engine.currentWeight().format("%.1f") + "kg";
         if (hr != null) {
             bottom += "  " + hr + "bpm";
         }
@@ -97,14 +97,15 @@ class WorkoutView extends WatchUi.View {
             Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        var summary = _engine.config.edgeName() + " @ "
-            + _engine.config.weightKg.format("%.1f") + " kg";
+        var summary = _engine.config.edgeName() + "  top "
+            + _engine.config.maxWeight().format("%.1f") + " kg";
         dc.drawText(cx, h * 36 / 100, Graphics.FONT_SMALL, summary,
             Graphics.TEXT_JUSTIFY_CENTER);
         var lifts = _engine.completedLifts + " lifts";
         if (_engine.failedLifts > 0) {
             lifts += ", " + _engine.failedLifts + " failed";
         }
+        lifts += "  " + _engine.volumeKg.format("%.0f") + " kg vol";
         dc.drawText(cx, h * 48 / 100, Graphics.FONT_SMALL, lifts,
             Graphics.TEXT_JUSTIFY_CENTER);
 

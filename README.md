@@ -8,10 +8,13 @@ activity that syncs to Garmin Connect.
 
 ## Features
 
-- Configurable protocol, all on-device (no phone needed):
-  - sets, lifts per set
+- Workouts are defined as a plan of **building blocks**, each block being
+  sets x lifts @ weight, so pyramids like `2x12 @ 40 kg, 1x8 @ 55 kg,
+  1x4 @ 65 kg, 1x4 @ 70 kg` run as one session with the right load shown
+  for every set. All editable on-device (no phone needed):
+  - add/delete blocks; per block: sets, lifts, weight (0.5 kg steps)
   - lift duration, rest between lifts, rest between sets
-  - load in kg and edge type (6-30 mm, pinch, sloper)
+  - edge type (6-30 mm, pinch, sloper)
   - optional alternating left/right hand labelling per lift
 - 10 s "get ready" countdown, then a big colour-coded timer:
   green **LIFT**, blue **REST**, with a 3-2-1 vibration heads-up before
@@ -25,23 +28,25 @@ activity that syncs to Garmin Connect.
   Discard**.
 - Settings persist between sessions.
 
-Defaults: 4 sets x 6 lifts, 10 s on / 20 s off, 2 min between sets,
-20 kg on a 20 mm edge.
+Defaults: 2x12 @ 40 kg, 1x8 @ 55 kg, 1x4 @ 65 kg, 1x4 @ 70 kg on a
+20 mm edge; 10 s on / 20 s off, 2 min between sets.
 
 ## How sessions are recorded
 
 Each workout is saved as a **Training / Strength** activity. The activity
-name embeds the setup, e.g. `Edge Lift 20 mm 24.0kg`, and each set is a
-lap. On top of the standard data (duration, HR, calories), these Connect
-IQ developer fields are written into the session record of the FIT file:
+name embeds the setup, e.g. `Edge Lift 20 mm top 70.0kg`, and each set is
+a lap. On top of the standard data (duration, HR, calories), these
+Connect IQ developer fields are written into the FIT file:
 
-| Field             | Type    | Notes                        |
-|-------------------|---------|------------------------------|
-| `edge_type`       | string  | e.g. "20 mm", "Pinch"        |
-| `weight`          | float   | kg                           |
-| `lifts_completed` | uint16  | total lifts finished         |
-| `lifts_failed`    | uint16  | lifts you marked failed      |
-| `rpe`             | float   | post-workout effort, 1-10    |
+| Field             | Record  | Type    | Notes                         |
+|-------------------|---------|---------|-------------------------------|
+| `edge_type`       | session | string  | e.g. "20 mm", "Pinch"         |
+| `max_weight`      | session | float   | heaviest block, kg            |
+| `volume`          | session | float   | sum of weight over lifts, kg  |
+| `lifts_completed` | session | uint16  | total lifts finished          |
+| `lifts_failed`    | session | uint16  | lifts you marked failed       |
+| `rpe`             | session | float   | post-workout effort, 1-10     |
+| `weight`          | lap     | float   | load for that set, kg         |
 
 The name is always visible in Garmin Connect; the developer fields live
 in the FIT file and are readable by FIT tools (Garmin Connect only
