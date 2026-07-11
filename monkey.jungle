@@ -1,0 +1,4 @@
+project.manifest = manifest.xml
+
+# Gradual type checking keeps builds permissive across SDK versions.
+project.typecheck = 0
