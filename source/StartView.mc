@@ -28,7 +28,10 @@ class StartView extends WatchUi.View {
         var line1 = _config.sets + " sets x " + _config.reps + " lifts";
         var line2 = _config.workSecs + "s on / " + _config.repRestSecs + "s off";
         var line3 = (_config.setRestSecs / 60.0).format("%.1f") + " min between sets";
-        var line4 = _config.weightKg.format("%.1f") + " kg";
+        var line4 = _config.edgeName() + " @ " + _config.weightKg.format("%.1f") + " kg";
+        if (_config.alternateHands) {
+            line4 += "  L/R";
+        }
         dc.drawText(cx, h * 32 / 100, Graphics.FONT_SMALL, line1, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(cx, h * 44 / 100, Graphics.FONT_SMALL, line2, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(cx, h * 56 / 100, Graphics.FONT_SMALL, line3, Graphics.TEXT_JUSTIFY_CENTER);

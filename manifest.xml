@@ -14,6 +14,9 @@
             <iq:product id="fenix7s"/>
             <iq:product id="fenix7x"/>
             <iq:product id="epix2"/>
+            <iq:product id="epix2pro42mm"/>
+            <iq:product id="epix2pro47mm"/>
+            <iq:product id="epix2pro51mm"/>
             <iq:product id="fr255"/>
             <iq:product id="fr265"/>
             <iq:product id="fr265s"/>
@@ -34,6 +37,7 @@
             <iq:product id="instinct2x"/>
         </iq:products>
         <iq:permissions>
+            <iq:uses-permission id="FitContributor"/>
         </iq:permissions>
         <iq:languages>
             <iq:language>eng</iq:language>

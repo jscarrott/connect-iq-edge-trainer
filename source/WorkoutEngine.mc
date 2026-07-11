@@ -1,6 +1,7 @@
 import Toybox.Activity;
 import Toybox.ActivityRecording;
 import Toybox.Attention;
+import Toybox.FitContributor;
 import Toybox.Lang;
 import Toybox.System;
 import Toybox.Timer;
@@ -27,9 +28,17 @@ class WorkoutEngine {
     var remaining as Number = PREP_SECS;
     var paused as Boolean = false;
     var saved as Boolean = false;
+    var completedLifts as Number = 0;
+    var failedLifts as Number = 0;
+    var lastLiftFailed as Boolean = false;
 
     private var _timer as Timer.Timer;
     private var _session as ActivityRecording.Session?;
+    private var _fEdge as FitContributor.Field?;
+    private var _fWeight as FitContributor.Field?;
+    private var _fLifts as FitContributor.Field?;
+    private var _fFailed as FitContributor.Field?;
+    private var _fRpe as FitContributor.Field?;
 
     function initialize(cfg as WorkoutConfig) {
         config = cfg;
@@ -37,16 +46,42 @@ class WorkoutEngine {
     }
 
     function start() as Void {
+        var name = "Edge Lift " + config.edgeName() + " "
+            + config.weightKg.format("%.1f") + "kg";
         _session = ActivityRecording.createSession({
-            :name => "Edge Lifting",
+            :name => name,
             :sport => Activity.SPORT_TRAINING,
             :subSport => Activity.SUB_SPORT_STRENGTH_TRAINING
         });
+        _createFitFields();
         _session.start();
         state = STATE_PREP;
         remaining = PREP_SECS;
         _timer.start(method(:onTick), 1000, true);
         _buzz(false);
+    }
+
+    private function _createFitFields() as Void {
+        var s = _session;
+        if (s == null) {
+            return;
+        }
+        _fEdge = s.createField("edge_type", 0, FitContributor.DATA_TYPE_STRING,
+            {:count => 16, :mesgType => FitContributor.MESG_TYPE_SESSION});
+        _fWeight = s.createField("weight", 1, FitContributor.DATA_TYPE_FLOAT,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "kg"});
+        _fLifts = s.createField("lifts_completed", 2, FitContributor.DATA_TYPE_UINT16,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION});
+        _fFailed = s.createField("lifts_failed", 3, FitContributor.DATA_TYPE_UINT16,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION});
+        _fRpe = s.createField("rpe", 4, FitContributor.DATA_TYPE_FLOAT,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION});
+        if (_fEdge != null) {
+            _fEdge.setData(config.edgeName());
+        }
+        if (_fWeight != null) {
+            _fWeight.setData(config.weightKg);
+        }
     }
 
     function onTick() as Void {
@@ -67,8 +102,10 @@ class WorkoutEngine {
         if (state == STATE_PREP || state == STATE_REST || state == STATE_SET_REST) {
             state = STATE_WORK;
             remaining = config.workSecs;
+            lastLiftFailed = false;
             _buzz(true);
         } else if (state == STATE_WORK) {
+            completedLifts += 1;
             if (currentRep < config.reps) {
                 currentRep += 1;
                 state = STATE_REST;
@@ -87,6 +124,26 @@ class WorkoutEngine {
                 finish();
             }
         }
+    }
+
+    // Which hand lifts next/now, or null when not alternating.
+    // Lift 1, 3, 5... = left; 2, 4, 6... = right.
+    function handLabel() as String? {
+        if (!config.alternateHands) {
+            return null;
+        }
+        return (currentRep % 2 == 1) ? "LEFT" : "RIGHT";
+    }
+
+    // Toggle the made/failed flag on the most recent lift (during rests).
+    function toggleLastLiftFailed() as Void {
+        if (completedLifts == 0 || state == STATE_WORK || state == STATE_PREP
+                || state == STATE_DONE) {
+            return;
+        }
+        lastLiftFailed = !lastLiftFailed;
+        failedLifts += lastLiftFailed ? 1 : -1;
+        WatchUi.requestUpdate();
     }
 
     function togglePause() as Void {
@@ -116,18 +173,39 @@ class WorkoutEngine {
         }
     }
 
-    // Stop the workout and save the activity to the watch.
+    // Stop the workout and ask for RPE; the activity is saved by the
+    // picker callbacks via saveSession().
     function finish() as Void {
         _timer.stop();
         state = STATE_DONE;
         paused = false;
         if (_session != null) {
             _session.stop();
+            if (_fLifts != null) {
+                _fLifts.setData(completedLifts);
+            }
+            if (_fFailed != null) {
+                _fFailed.setData(failedLifts);
+            }
+            _buzz(true);
+            var picker = new NumberPickerView("Effort (RPE)", 7.0, 1.0, 10.0,
+                0.5, "");
+            WatchUi.pushView(picker, new RpePickerDelegate(picker, self),
+                WatchUi.SLIDE_UP);
+        }
+        WatchUi.requestUpdate();
+    }
+
+    // Write the FIT file. rpe of null skips the RPE field.
+    function saveSession(rpe as Float?) as Void {
+        if (_session != null) {
+            if (rpe != null && _fRpe != null) {
+                _fRpe.setData(rpe);
+            }
             _session.save();
             _session = null;
             saved = true;
         }
-        _buzz(true);
         WatchUi.requestUpdate();
     }
 
@@ -173,5 +251,41 @@ class WorkoutEngine {
         if (Attention has :vibrate) {
             Attention.vibrate([new Attention.VibeProfile(50, 100)]);
         }
+    }
+}
+
+// Confirms (or skips) the post-workout effort rating, then saves.
+class RpePickerDelegate extends WatchUi.BehaviorDelegate {
+
+    private var _view as NumberPickerView;
+    private var _engine as WorkoutEngine;
+
+    function initialize(view as NumberPickerView, engine as WorkoutEngine) {
+        BehaviorDelegate.initialize();
+        _view = view;
+        _engine = engine;
+    }
+
+    function onPreviousPage() as Boolean {
+        _view.increment();
+        return true;
+    }
+
+    function onNextPage() as Boolean {
+        _view.decrement();
+        return true;
+    }
+
+    function onSelect() as Boolean {
+        _engine.saveSession(_view.value);
+        WatchUi.popView(WatchUi.SLIDE_DOWN);
+        return true;
+    }
+
+    // Skipping the rating still saves the activity.
+    function onBack() as Boolean {
+        _engine.saveSession(null);
+        WatchUi.popView(WatchUi.SLIDE_DOWN);
+        return true;
     }
 }

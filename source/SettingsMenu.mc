@@ -1,7 +1,8 @@
 import Toybox.Lang;
 import Toybox.WatchUi;
 
-// On-device settings: each row opens a number picker.
+// On-device settings: each row opens a number picker, edge type opens a
+// list, alternate hands is a toggle.
 module Settings {
     function pushMenu(config as WorkoutConfig) as Void {
         var menu = new WatchUi.Menu2({:title => "Settings"});
@@ -11,6 +12,9 @@ module Settings {
         menu.addItem(new WatchUi.MenuItem("Rest between lifts", config.repRestSecs + " s", :repRestSecs, null));
         menu.addItem(new WatchUi.MenuItem("Rest between sets", config.setRestSecs + " s", :setRestSecs, null));
         menu.addItem(new WatchUi.MenuItem("Weight", config.weightKg.format("%.1f") + " kg", :weightKg, null));
+        menu.addItem(new WatchUi.MenuItem("Edge", config.edgeName(), :edge, null));
+        menu.addItem(new WatchUi.ToggleMenuItem("Alternate hands", null, :altHands,
+            config.alternateHands, null));
         WatchUi.pushView(menu, new SettingsMenuDelegate(config, menu), WatchUi.SLIDE_LEFT);
     }
 }
@@ -40,6 +44,16 @@ class SettingsMenuDelegate extends WatchUi.Menu2InputDelegate {
             _pick(item, "Rest between sets", _config.setRestSecs.toFloat(), 30.0, 600.0, 15.0, " s");
         } else if (id == :weightKg) {
             _pick(item, "Weight", _config.weightKg, 0.0, 150.0, 0.5, " kg");
+        } else if (id == :edge) {
+            var menu = new WatchUi.Menu2({:title => "Edge"});
+            for (var i = 0; i < EDGE_TYPES.size(); i++) {
+                menu.addItem(new WatchUi.MenuItem(EDGE_TYPES[i] as String, null, i, null));
+            }
+            WatchUi.pushView(menu, new EdgeMenuDelegate(_config, item),
+                WatchUi.SLIDE_LEFT);
+        } else if (id == :altHands && item instanceof WatchUi.ToggleMenuItem) {
+            _config.alternateHands = item.isEnabled();
+            _config.save();
         }
     }
 
@@ -75,5 +89,32 @@ class SettingsMenuDelegate extends WatchUi.Menu2InputDelegate {
             item.setSubLabel(_config.weightKg.format("%.1f") + " kg");
         }
         _config.save();
+    }
+}
+
+// Picks one of EDGE_TYPES; the menu item id is the array index.
+class EdgeMenuDelegate extends WatchUi.Menu2InputDelegate {
+
+    private var _config as WorkoutConfig;
+    private var _parentItem as WatchUi.MenuItem;
+
+    function initialize(config as WorkoutConfig, parentItem as WatchUi.MenuItem) {
+        Menu2InputDelegate.initialize();
+        _config = config;
+        _parentItem = parentItem;
+    }
+
+    function onSelect(item as WatchUi.MenuItem) as Void {
+        var id = item.getId();
+        if (id instanceof Number) {
+            _config.edgeIdx = id;
+            _config.save();
+            _parentItem.setSubLabel(_config.edgeName());
+        }
+        WatchUi.popView(WatchUi.SLIDE_RIGHT);
+    }
+
+    function onBack() as Void {
+        WatchUi.popView(WatchUi.SLIDE_RIGHT);
     }
 }

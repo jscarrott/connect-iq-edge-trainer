@@ -24,20 +24,23 @@ class WorkoutView extends WatchUi.View {
             return;
         }
 
+        var hand = _engine.handLabel();
         var label;
         var color;
+        var subLabel = null;
         if (_engine.state == WorkoutEngine.STATE_PREP) {
             label = "GET READY";
             color = Graphics.COLOR_YELLOW;
         } else if (_engine.state == WorkoutEngine.STATE_WORK) {
-            label = "LIFT";
+            label = (hand != null) ? "LIFT " + hand : "LIFT";
             color = Graphics.COLOR_GREEN;
-        } else if (_engine.state == WorkoutEngine.STATE_SET_REST) {
-            label = "SET REST";
-            color = Graphics.COLOR_BLUE;
         } else {
-            label = "REST";
+            label = (_engine.state == WorkoutEngine.STATE_SET_REST)
+                ? "SET REST" : "REST";
             color = Graphics.COLOR_BLUE;
+            if (hand != null) {
+                subLabel = "Next: " + hand;
+            }
         }
 
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
@@ -55,6 +58,16 @@ class WorkoutView extends WatchUi.View {
         dc.drawText(cx, h * 28 / 100, Graphics.FONT_NUMBER_THAI_HOT, timeStr,
             Graphics.TEXT_JUSTIFY_CENTER);
 
+        if (_engine.lastLiftFailed) {
+            dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, h * 52 / 100, Graphics.FONT_XTINY, "LAST: FAILED",
+                Graphics.TEXT_JUSTIFY_CENTER);
+        } else if (subLabel != null) {
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, h * 52 / 100, Graphics.FONT_XTINY, subLabel,
+                Graphics.TEXT_JUSTIFY_CENTER);
+        }
+
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         var progress = "Set " + _engine.currentSet + "/" + _engine.config.sets
             + "  Rep " + _engine.currentRep + "/" + _engine.config.reps;
@@ -62,9 +75,10 @@ class WorkoutView extends WatchUi.View {
             Graphics.TEXT_JUSTIFY_CENTER);
 
         var hr = _engine.heartRate();
-        var bottom = _engine.config.weightKg.format("%.1f") + " kg";
+        var bottom = _engine.config.edgeName() + "  "
+            + _engine.config.weightKg.format("%.1f") + "kg";
         if (hr != null) {
-            bottom += "  " + hr + " bpm";
+            bottom += "  " + hr + "bpm";
         }
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, h * 74 / 100, Graphics.FONT_SMALL, bottom,
@@ -79,20 +93,26 @@ class WorkoutView extends WatchUi.View {
 
     private function _drawDone(dc as Dc, cx as Number, h as Number) as Void {
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 20 / 100, Graphics.FONT_LARGE, "DONE!",
+        dc.drawText(cx, h * 16 / 100, Graphics.FONT_LARGE, "DONE!",
             Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        var summary = _engine.config.sets + " x " + _engine.config.reps
-            + " @ " + _engine.config.weightKg.format("%.1f") + " kg";
-        dc.drawText(cx, h * 42 / 100, Graphics.FONT_SMALL, summary,
+        var summary = _engine.config.edgeName() + " @ "
+            + _engine.config.weightKg.format("%.1f") + " kg";
+        dc.drawText(cx, h * 36 / 100, Graphics.FONT_SMALL, summary,
+            Graphics.TEXT_JUSTIFY_CENTER);
+        var lifts = _engine.completedLifts + " lifts";
+        if (_engine.failedLifts > 0) {
+            lifts += ", " + _engine.failedLifts + " failed";
+        }
+        dc.drawText(cx, h * 48 / 100, Graphics.FONT_SMALL, lifts,
             Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         var note = _engine.saved ? "Activity saved" : "Not saved";
-        dc.drawText(cx, h * 56 / 100, Graphics.FONT_SMALL, note,
+        dc.drawText(cx, h * 60 / 100, Graphics.FONT_SMALL, note,
             Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(cx, h * 74 / 100, Graphics.FONT_XTINY, "BACK to exit",
+        dc.drawText(cx, h * 76 / 100, Graphics.FONT_XTINY, "BACK to exit",
             Graphics.TEXT_JUSTIFY_CENTER);
     }
 }
@@ -108,6 +128,12 @@ class WorkoutDelegate extends WatchUi.BehaviorDelegate {
 
     function onSelect() as Boolean {
         _engine.togglePause();
+        return true;
+    }
+
+    // DOWN during a rest marks the last lift failed (press again to undo).
+    function onNextPage() as Boolean {
+        _engine.toggleLastLiftFailed();
         return true;
     }
 
@@ -141,8 +167,9 @@ class PauseMenuDelegate extends WatchUi.Menu2InputDelegate {
             WatchUi.popView(WatchUi.SLIDE_DOWN);
             _engine.resume();
         } else if (id == :finish) {
-            _engine.finish();
+            // pop the menu first: finish() pushes the RPE picker on top
             WatchUi.popView(WatchUi.SLIDE_DOWN);
+            _engine.finish();
         } else if (id == :discard) {
             _engine.discard();
             // pop the menu and the workout view
