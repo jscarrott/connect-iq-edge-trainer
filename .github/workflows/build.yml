@@ -1,0 +1,98 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+env:
+  # Pinned Connect IQ SDK (publicly downloadable, unlike device files)
+  SDK_URL: https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-9.2.0-2026-06-09-92a1605b2.zip
+  # Space-separated device ids to compile; must exist in ci/devices.tar.gz
+  BUILD_DEVICES: epix2pro47mm
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate XML
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxml2-utils
+          xmllint --noout manifest.xml
+          find resources -name '*.xml' -print0 | xargs -0 xmllint --noout
+          echo "XML OK"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Connect IQ SDK
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/connectiq-sdk
+          key: ciq-sdk-${{ env.SDK_URL }}
+
+      - name: Download Connect IQ SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/sdk.zip "$SDK_URL"
+          mkdir -p ~/connectiq-sdk
+          unzip -q /tmp/sdk.zip -d ~/connectiq-sdk
+
+      - name: Install device files
+        id: devices
+        run: |
+          if [ -f ci/devices.tar.gz ]; then
+            mkdir -p ~/.Garmin/ConnectIQ/Devices
+            tar -xzf ci/devices.tar.gz -C ~/.Garmin/ConnectIQ/Devices
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "devices: $(ls ~/.Garmin/ConnectIQ/Devices)"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ci/devices.tar.gz not found - skipping compile." \
+              "Garmin requires a developer login for device files, so run" \
+              "./ci/package-devices.sh locally and commit the tarball to" \
+              "enable full CI builds."
+          fi
+
+      - name: Set up developer key
+        if: steps.devices.outputs.present == 'true'
+        env:
+          CIQ_DEVELOPER_KEY: ${{ secrets.CIQ_DEVELOPER_KEY }}
+        run: |
+          if [ -n "$CIQ_DEVELOPER_KEY" ]; then
+            # base64 of your real developer_key.der, for store-ready builds
+            echo "$CIQ_DEVELOPER_KEY" | base64 -d > /tmp/developer_key.der
+          else
+            # throwaway key: fine for CI validation and sideloading
+            openssl genrsa -out /tmp/key.pem 4096 2>/dev/null
+            openssl pkcs8 -topk8 -inform PEM -outform DER \
+              -in /tmp/key.pem -out /tmp/developer_key.der -nocrypt
+          fi
+
+      - name: Compile
+        if: steps.devices.outputs.present == 'true'
+        run: |
+          mkdir -p bin
+          for device in $BUILD_DEVICES; do
+            echo "=== building $device ==="
+            ~/connectiq-sdk/bin/monkeyc \
+              -f monkey.jungle \
+              -d "$device" \
+              -y /tmp/developer_key.der \
+              -w \
+              -o "bin/EdgeTrainer-$device.prg"
+          done
+          ls -la bin/
+
+      - name: Upload .prg artifacts
+        if: steps.devices.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-trainer-prg
+          path: bin/*.prg
+          retention-days: 30

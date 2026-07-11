@@ -88,6 +88,24 @@ epix 2 / epix 2 Pro, Forerunner 255/265/745/945/955/965, venu 2/3,
 vivoactive 4/5, Instinct 2). Add or remove `<iq:product>` entries as you like — the app
 uses only API level 3.2 features.
 
+## CI
+
+`.github/workflows/build.yml` runs on every push and PR. It always
+validates the project XML; compiling needs Connect IQ *device files*,
+which Garmin gates behind a developer login, so the compile step is
+enabled by committing them once from your machine:
+
+```sh
+./ci/package-devices.sh epix2pro47mm   # add more device ids if you like
+git add ci/devices.tar.gz && git commit -m "Add CI device files"
+```
+
+After that, CI compiles for every device in the workflow's
+`BUILD_DEVICES` list and uploads the `.prg` files as artifacts (signed
+with a throwaway key, which sideloads fine). To have CI sign with your
+real developer key instead, add a repository secret `CIQ_DEVELOPER_KEY`
+containing `base64 -w0 developer_key.der`.
+
 ## Project layout
 
 ```
