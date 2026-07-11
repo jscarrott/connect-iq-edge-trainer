@@ -4,6 +4,7 @@ import Toybox.Attention;
 import Toybox.FitContributor;
 import Toybox.Lang;
 import Toybox.System;
+import Toybox.Time;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
@@ -35,6 +36,8 @@ class WorkoutEngine {
     var failedLifts as Number = 0;
     var lastLiftFailed as Boolean = false;
     var volumeKg as Float = 0.0;    // sum of weight over finished lifts
+    var maxLiftedKg as Float = 0.0; // heaviest completed lift
+    var bestE1rm as Float = 0.0;    // best Epley estimate across sets
 
     private var _setPlan as Array = []; // per set: [lifts, weight kg]
     private var _timer as Timer.Timer;
@@ -46,6 +49,8 @@ class WorkoutEngine {
     private var _fRpe as FitContributor.Field?;
     private var _fVolume as FitContributor.Field?;
     private var _fLapWeight as FitContributor.Field?;
+    private var _fTut as FitContributor.Field?;
+    private var _fE1rm as FitContributor.Field?;
 
     function initialize(cfg as WorkoutConfig) {
         config = cfg;
@@ -103,6 +108,10 @@ class WorkoutEngine {
             {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "kg"});
         _fLapWeight = s.createField("weight", 6, FitContributor.DATA_TYPE_FLOAT,
             {:mesgType => FitContributor.MESG_TYPE_LAP, :units => "kg"});
+        _fTut = s.createField("tut", 7, FitContributor.DATA_TYPE_UINT16,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "s"});
+        _fE1rm = s.createField("e1rm", 8, FitContributor.DATA_TYPE_FLOAT,
+            {:mesgType => FitContributor.MESG_TYPE_SESSION, :units => "kg"});
         if (_fEdge != null) {
             _fEdge.setData(config.edgeName());
         }
@@ -136,7 +145,16 @@ class WorkoutEngine {
             _buzz(true);
         } else if (state == STATE_WORK) {
             completedLifts += 1;
-            volumeKg += currentWeight();
+            var w = currentWeight();
+            volumeKg += w;
+            if (w > maxLiftedKg) {
+                maxLiftedKg = w;
+            }
+            // Epley e1RM from reps completed so far in this set
+            var e1rm = w * (1.0 + currentRep / 30.0);
+            if (e1rm > bestE1rm) {
+                bestE1rm = e1rm;
+            }
             if (currentRep < repsThisSet()) {
                 currentRep += 1;
                 state = STATE_REST;
@@ -231,6 +249,12 @@ class WorkoutEngine {
             if (_fVolume != null) {
                 _fVolume.setData(volumeKg);
             }
+            if (_fTut != null) {
+                _fTut.setData(completedLifts * config.workSecs);
+            }
+            if (_fE1rm != null) {
+                _fE1rm.setData(bestE1rm);
+            }
             _buzz(true);
             var picker = new NumberPickerView("Effort (RPE)", 7.0, 1.0, 10.0,
                 0.5, "");
@@ -249,6 +273,9 @@ class WorkoutEngine {
             _session.save();
             _session = null;
             saved = true;
+            HistoryLog.add([Time.now().value(), config.edgeIdx, maxLiftedKg,
+                bestE1rm, completedLifts * config.workSecs, volumeKg,
+                completedLifts, failedLifts, (rpe != null) ? rpe : -1.0]);
         }
         WatchUi.requestUpdate();
     }

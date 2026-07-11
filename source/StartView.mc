@@ -52,7 +52,7 @@ class StartView extends WatchUi.View {
             Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.drawText(cx, h * 86 / 100, Graphics.FONT_XTINY,
-            "START to go - MENU for setup", Graphics.TEXT_JUSTIFY_CENTER);
+            "START go - MENU setup - DOWN log", Graphics.TEXT_JUSTIFY_CENTER);
     }
 }
 
@@ -75,6 +75,12 @@ class StartDelegate extends WatchUi.BehaviorDelegate {
 
     function onMenu() as Boolean {
         Settings.pushMenu(_config);
+        return true;
+    }
+
+    function onNextPage() as Boolean {
+        var view = new HistoryView();
+        WatchUi.pushView(view, new HistoryDelegate(view), WatchUi.SLIDE_UP);
         return true;
     }
 }

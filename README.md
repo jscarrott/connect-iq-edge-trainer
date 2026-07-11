@@ -24,6 +24,9 @@ activity that syncs to Garmin Connect.
 - Press DOWN during a rest to mark the last lift **failed** (press again
   to undo); when the workout ends you're asked for an **RPE** (BACK skips
   it), then the activity is saved.
+- **On-watch history**: press DOWN on the start screen to browse past
+  sessions (last 60) - date, edge, top weight, estimated 1RM, time under
+  tension, volume, lifts/fails, RPE.
 - Pause (press START), or press BACK for **Resume / Finish & save /
   Discard**.
 - Settings persist between sessions.
@@ -46,7 +49,40 @@ Connect IQ developer fields are written into the FIT file:
 | `lifts_completed` | session | uint16  | total lifts finished          |
 | `lifts_failed`    | session | uint16  | lifts you marked failed       |
 | `rpe`             | session | float   | post-workout effort, 1-10     |
+| `tut`             | session | uint16  | time under tension, seconds   |
+| `e1rm`            | session | float   | best Epley estimate, kg       |
 | `weight`          | lap     | float   | load for that set, kg         |
+
+`e1rm` uses the Epley formula (`weight x (1 + reps/30)`) over the best
+completed set. It's calibrated for barbell lifts, not finger loading,
+so treat it as a consistent *relative* trend rather than gospel.
+
+## Viewing your metrics
+
+- **On the watch**: DOWN on the start screen opens the session history.
+- **Garmin Connect**: shows the activity name, laps, HR, etc. Developer
+  fields are only rendered for apps installed from the Connect IQ store,
+  and even then only per-activity - Connect never charts custom fields
+  across activities.
+- **intervals.icu** (best for trends): link your Garmin account and
+  activities sync automatically, FIT developer fields included. Custom
+  activity fields/charts (a free power-user feature: small server-side
+  scripts) can read those fields and plot them across activities - an
+  e1RM-over-time or TUT-per-week chart. See the intervals.icu forum
+  threads on [custom activity fields](https://forum.intervals.icu/t/custom-activity-fields/25515)
+  and [developer fields for custom charts](https://forum.intervals.icu/t/developer-fields-for-custom-charts-and-fields/29675)
+  for the mechanics; note some users report certain Connect IQ developer
+  fields need a manual custom-field mapping before they surface.
+- **Spreadsheet/DIY**: `tools/fit_report.py` extracts every Edge Trainer
+  field from FIT files into CSV:
+
+  ```sh
+  pip install fitdecode
+  python3 tools/fit_report.py activities/*.fit > report.csv
+  ```
+
+  FIT files live on the watch at `GARMIN/Activity/` (USB) or via
+  "Export Original" on any Garmin Connect activity.
 
 The name is always visible in Garmin Connect; the developer fields live
 in the FIT file and are readable by FIT tools (Garmin Connect only
